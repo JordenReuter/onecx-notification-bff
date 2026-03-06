@@ -1,0 +1,24 @@
+app:
+ name: bff
+ image:
+  repository: "onecx/onecx-notification-bff"
+ operator:
+  # Permission
+  permission:
+   enabled: true
+   spec:
+    permissions:
+     notifications:
+      read: permission on all GET requests and POST search
+      write: permission on PUT, POST, PATCH requests, where objects are saved or updated
+      delete: permission on all DELETE requests
+  keycloak:
+   client:
+    enabled: true
+    spec:
+     kcConfig:
+      defaultClientScopes: [ ocx-no:all, ocx-pm:read ]
+  microservice:
+   spec:
+    description: OneCX Notification Backend For Frontend
+    name: OneCX Notification BFF
