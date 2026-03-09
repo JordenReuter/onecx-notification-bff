@@ -79,6 +79,8 @@ components:
   Notification:
    type: object
    properties:
+    id:
+     type: string
     applicationId:
      type: string
     senderId:

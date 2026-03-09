@@ -9,7 +9,10 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
 import org.jboss.logging.Logger;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.tkit.onecx.notification.bff.rs.service.NotificationCacheManager;
+
+import gen.org.tkit.onecx.notification.svc.internal.client.api.NotificationInternalApi;
 import org.tkit.quarkus.log.cdi.LogService;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -65,6 +68,10 @@ public class NotificationBridgeSetup {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    @RestClient
+    NotificationInternalApi notificationSVCClient;
 
     void onStart(@Observes StartupEvent event) {
         // sessionTimeout: how long a session survives without any client frame (ms)
@@ -134,6 +141,19 @@ public class NotificationBridgeSetup {
                                                         String json = objectMapper.writeValueAsString(n);
                                                         // publish locally — SockJS bridge delivers to this client
                                                         rawEventBus.publish(address, json);
+                                                        // Mark persisted notifications as delivered
+                                                        if (Boolean.TRUE.equals(n.getPersist()) && n.getId() != null) {
+                                                            try (var r = notificationSVCClient
+                                                                    .markNotificationAsDelivered(n.getId())) {
+                                                                LOG.debugf(
+                                                                        "Marked stored notification id='%s' as delivered (status=%d)",
+                                                                        n.getId(), r.getStatus());
+                                                            } catch (Exception ex) {
+                                                                LOG.warnf(
+                                                                        "Failed to mark stored notification id='%s' as delivered: %s",
+                                                                        n.getId(), ex.getMessage());
+                                                            }
+                                                        }
                                                     } catch (Exception e) {
                                                         LOG.errorf("Failed to serialize notification: %s",
                                                                 e.getMessage());

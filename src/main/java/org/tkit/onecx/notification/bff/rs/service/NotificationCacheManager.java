@@ -8,6 +8,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
+import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.jboss.logging.Logger;
 import org.tkit.onecx.notification.bff.rs.ws.NotificationBridgeSetup;
 import org.tkit.quarkus.log.cdi.LogService;
@@ -18,6 +19,7 @@ import com.hazelcast.topic.ITopic;
 
 import gen.org.tkit.onecx.notification.bff.rs.internal.model.NotificationDTO;
 import gen.org.tkit.onecx.notification.bff.rs.internal.model.NotificationRetrieveRequestDTO;
+import gen.org.tkit.onecx.notification.svc.internal.client.api.NotificationInternalApi;
 import io.quarkus.runtime.StartupEvent;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
@@ -51,6 +53,10 @@ public class NotificationCacheManager {
     @Inject
     EventBus eventBus;
 
+    @Inject
+    @RestClient
+    NotificationInternalApi notificationSVCClient;
+
     private final AtomicReference<AsyncMap<String, List<NotificationDTO>>> clusterMapRef = new AtomicReference<>();
     private ITopic<String> topic;
 
@@ -63,7 +69,6 @@ public class NotificationCacheManager {
         // Hazelcast registers its instance globally — retrieve it without any casting or CDI tricks
         HazelcastInstance hz = Hazelcast.getAllHazelcastInstances().iterator().next();
         topic = hz.getTopic(TOPIC_NAME);
-
         topic.addMessageListener(message -> {
             JsonObject payload = new JsonObject(message.getMessageObject());
             String receiverId = payload.getString("receiverId");
@@ -80,11 +85,25 @@ public class NotificationCacheManager {
                     // receivers in a local Set updated by the SockJS REGISTER/SOCKET_CLOSED events.
                     // The activeReceivers set is maintained by NotificationBridgeSetup.
                     if (NotificationBridgeSetup.hasActiveReceiver(receiverId)) {
+                        Boolean persist = payload.getBoolean("persist");
+                        String notificationId = payload.getString("id");
                         map().flatMap(m -> m.remove(receiverId))
                                 .subscribe().with(
-                                        ignored -> LOG.debugf(
-                                                "Removed live-delivered notification from IMap key='%s'",
-                                                receiverId),
+                                        ignored -> {
+                                            LOG.debugf(
+                                                    "Removed live-delivered notification from IMap key='%s'",
+                                                    receiverId);
+                                            if (Boolean.TRUE.equals(persist) && notificationId != null) {
+                                                try (var r = notificationSVCClient
+                                                        .markNotificationAsDelivered(notificationId)) {
+                                                    LOG.debugf("Marked notification id='%s' as delivered (status=%d)",
+                                                            notificationId, r.getStatus());
+                                                } catch (Exception ex) {
+                                                    LOG.warnf("Failed to mark notification id='%s' as delivered: %s",
+                                                            notificationId, ex.getMessage());
+                                                }
+                                            }
+                                        },
                                         err -> LOG.warnf(
                                                 "Failed to remove live-delivered notification: %s",
                                                 err.getMessage()));
@@ -129,6 +148,7 @@ public class NotificationCacheManager {
                 })
                 .flatMap(ignored -> {
                     JsonObject payload = new JsonObject()
+                            .put("id", notification.getId())
                             .put("applicationId", notification.getApplicationId())
                             .put("senderId", notification.getSenderId())
                             .put("receiverId", notification.getReceiverId())

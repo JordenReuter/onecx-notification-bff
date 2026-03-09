@@ -181,27 +181,27 @@
                     </configOptions>
                 </configuration>
             </plugin>
-<!--            <plugin>-->
-<!--                <groupId>com.googlecode.maven-download-plugin</groupId>-->
-<!--                <artifactId>download-maven-plugin</artifactId>-->
-<!--                <executions>-->
-<!--                    <execution>-->
-<!--                        <id>theme-svc-internal</id>-->
-<!--                        <phase>generate-resources</phase>-->
-<!--                        <goals>-->
-<!--                            <goal>wget</goal>-->
-<!--                        </goals>-->
-<!--                        <configuration>-->
-<!--                            <url>-->
-<!--                                https://raw.githubusercontent.com/onecx/onecx-theme-svc/main/src/main/openapi/onecx-theme-internal.yaml-->
-<!--                            </url>-->
-<!--                            <outputDirectory>target/tmp/openapi</outputDirectory>-->
-<!--                            <outputFileName>onecx-theme-svc.yaml</outputFileName>-->
-<!--                            <skipCache>true</skipCache>-->
-<!--                        </configuration>-->
-<!--                    </execution>-->
-<!--                </executions>-->
-<!--            </plugin>-->
+            <plugin>
+                <groupId>com.googlecode.maven-download-plugin</groupId>
+                <artifactId>download-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>notification-svc-internal</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>wget</goal>
+                        </goals>
+                        <configuration>
+                            <url>
+                                https://raw.githubusercontent.com/JordenReuter/onecx-notification-svc/refs/heads/feature/init-implementation/src/main/openapi/onecx-notification-internal.yaml
+                            </url>
+                            <outputDirectory>target/tmp/openapi</outputDirectory>
+                            <outputFileName>onecx-notification-internal-svc.yaml</outputFileName>
+                            <skipCache>true</skipCache>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>

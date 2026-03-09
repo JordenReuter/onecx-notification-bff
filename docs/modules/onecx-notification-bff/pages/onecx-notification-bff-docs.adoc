@@ -17,7 +17,16 @@ quarkus.http.auth.permission.default.policy=authenticated
 onecx.permissions.application-id=${quarkus.application.name}
 org.eclipse.microprofile.rest.client.propagateHeaders=apm-principal-token
 onecx.permissions.product-name=onecx-notification
+%prod.quarkus.rest-client.onecx_notification_svc.url=http://onecx-notification-svc:8080
+quarkus.openapi-generator.codegen.input-base-dir=target/tmp/openapi
+quarkus.openapi-generator.codegen.spec.onecx_notification_internal_svc_yaml.config-key=onecx_notification_svc
+quarkus.openapi-generator.codegen.spec.onecx_notification_internal_svc_yaml.base-package=gen.org.tkit.onecx.notification.svc.internal.client
+quarkus.openapi-generator.codegen.spec.onecx_notification_internal_svc_yaml.return-response=true
+quarkus.openapi-generator.codegen.spec.onecx_notification_internal_svc_yaml.additional-api-type-annotations=@org.eclipse.microprofile.rest.client.annotation.RegisterClientHeaders;
+quarkus.openapi-generator.codegen.spec.onecx_notification_internal_svc_yaml.additional-model-type-annotations=@io.quarkus.runtime.annotations.RegisterForReflection;
+quarkus.openapi-generator.codegen.spec.onecx_notification_internal_svc_yaml.enable-security-generation=false
 %prod.quarkus.oidc-client.client-id=${quarkus.application.name}
+%prod.quarkus.rest-client.onecx_notification_svc.providers=io.quarkus.oidc.client.reactive.filter.OidcClientRequestReactiveFilter
 ## CLUSTER (Hazelcast via vertx-hazelcast)
 %prod.quarkus.vertx.cluster.clustered=true
 quarkus.http.auth.permission.eventbus.paths=/eventbus/*
