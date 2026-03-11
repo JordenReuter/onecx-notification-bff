@@ -46,7 +46,10 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-rest-client-jackson</artifactId>
         </dependency>
-
+        <dependency>
+            <groupId>io.quarkiverse.openapi.generator</groupId>
+            <artifactId>quarkus-openapi-generator-oidc</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.tkit.quarkus.lib</groupId>
             <artifactId>tkit-quarkus-log-cdi</artifactId>
@@ -74,10 +77,6 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-hibernate-validator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.tkit.onecx.quarkus</groupId>
-            <artifactId>onecx-permissions</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -154,7 +153,7 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <additionalProperties>onecx-permissions=false</additionalProperties>
+                    <additionalProperties>onecx-scopes=true</additionalProperties>
                     <generatorName>jaxrs-spec</generatorName>
                     <apiNameSuffix>ApiService</apiNameSuffix>
                     <modelNameSuffix>DTO</modelNameSuffix>
@@ -193,7 +192,7 @@
                         </goals>
                         <configuration>
                             <url>
-                                https://raw.githubusercontent.com/JordenReuter/onecx-notification-svc/refs/heads/feature/init-implementation/src/main/openapi/onecx-notification-internal.yaml
+                                https://raw.githubusercontent.com/onecx/onecx-notification-svc/main/src/main/openapi/onecx-notification-internal.yaml
                             </url>
                             <outputDirectory>target/tmp/openapi</outputDirectory>
                             <outputFileName>onecx-notification-internal-svc.yaml</outputFileName>
