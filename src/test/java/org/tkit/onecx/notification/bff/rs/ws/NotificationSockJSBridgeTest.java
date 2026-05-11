@@ -340,7 +340,6 @@ class NotificationSockJSBridgeTest extends AbstractTest {
 
         assertThat(openLatch.await(5, TimeUnit.SECONDS)).isTrue();
         // Give the server time to process
-        Thread.sleep(500);
 
         // unknownAddress is not a receiverId — must NOT be tracked
         assertThat(NotificationSockJSBridge.hasActiveReceiver(unknownAddress)).isFalse();
@@ -392,9 +391,6 @@ class NotificationSockJSBridgeTest extends AbstractTest {
         // Receiver must be tracked as active
         await().atMost(3, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertThat(NotificationSockJSBridge.hasActiveReceiver(receiverId)).isTrue());
-
-        // Wait a moment to ensure no spurious messages arrive
-        Thread.sleep(500);
 
         // Empty inbox → no notification pushed to the WebSocket
         assertThat(received).isEmpty();
@@ -532,7 +528,8 @@ class NotificationSockJSBridgeTest extends AbstractTest {
         });
 
         assertThat(firstOpen.await(10, TimeUnit.SECONDS)).isTrue();
-        waitUntilTrue(10, () -> !firstReceived.isEmpty());
+        await().atMost(10, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(firstReceived).isNotEmpty());
 
         // Close first connection
         wsHolder.get(0).close();
@@ -565,10 +562,10 @@ class NotificationSockJSBridgeTest extends AbstractTest {
         assertThat(secondOpen.await(5, TimeUnit.SECONDS)).isTrue();
 
         // Receiver is active on this pod
-        waitUntilTrue(3, () -> NotificationSockJSBridge.hasActiveReceiver(receiverId));
+        await().atMost(3, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(NotificationSockJSBridge.hasActiveReceiver(receiverId)).isTrue());
 
         // No messages pushed — empty inbox
-        Thread.sleep(500);
         assertThat(secondReceived).isEmpty();
 
         if (!wsHolder.isEmpty())
@@ -578,7 +575,6 @@ class NotificationSockJSBridgeTest extends AbstractTest {
 
     @Test
     void sockjs_register_nullAddress_elsePathTaken_connectionOpen() throws Exception {
-        String token = getKeycloakUserToken(USER);
         CountDownLatch openLatch = new CountDownLatch(1);
         List<WebSocket> wsHolder = new ArrayList<>();
 
@@ -597,7 +593,6 @@ class NotificationSockJSBridgeTest extends AbstractTest {
         });
 
         assertThat(openLatch.await(5, TimeUnit.SECONDS)).isTrue();
-        Thread.sleep(500);
 
         // No receiverId should have been added — address was null
         assertThat(NotificationSockJSBridge.hasActiveReceiver("")).isFalse();
@@ -908,11 +903,12 @@ class NotificationSockJSBridgeTest extends AbstractTest {
         });
 
         assertThat(openLatch.await(5, TimeUnit.SECONDS)).isTrue();
-        Thread.sleep(500);
+
+        await().atMost(3, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(errors).isNotEmpty());
 
         assertThat(NotificationSockJSBridge.hasActiveReceiver(receiverId)).isFalse();
         assertThat(received).isEmpty();
-        assertThat(errors).isNotEmpty();
         assertThat(clusterService.consumeByReceiverId(receiverId).await().indefinitely()).hasSize(1);
 
         if (!wsHolder.isEmpty())
@@ -940,15 +936,4 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 && text.contains("\"body\":\"rejected\"");
     }
 
-    private void waitUntilTrue(int timeoutSeconds, java.util.function.BooleanSupplier condition) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
-        while (System.nanoTime() < deadline) {
-            if (condition.getAsBoolean()) {
-                return;
-            }
-            Thread.sleep(50);
-        }
-
-        assertThat(condition.getAsBoolean()).isTrue();
-    }
 }
