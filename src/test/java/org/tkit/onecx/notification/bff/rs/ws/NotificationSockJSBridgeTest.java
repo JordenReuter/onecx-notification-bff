@@ -79,7 +79,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
     }
 
     // -------------------------------------------------------------------------
-    // /eventbus/info — SockJS negotiation endpoint (authenticated)
+    // /eventbus/info — SockJS negotiation endpoint (permit)
     // -------------------------------------------------------------------------
 
     @Test
@@ -87,7 +87,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
         given()
                 .when().get("/eventbus/info")
                 .then()
-                .statusCode(401);
+                .statusCode(200);
     }
 
     @Test
@@ -142,7 +142,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
         List<WebSocket> wsHolder = new ArrayList<>();
 
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
-        WebSocketConnectOptions opts = sockjsOpts(token);
+        WebSocketConnectOptions opts = sockjsOpts();
 
         client.webSocket(opts).onComplete(ar -> {
             if (ar.succeeded()) {
@@ -155,6 +155,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -200,7 +201,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
 
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
-        client.webSocket(sockjsOpts(token)).onComplete(ar -> {
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
             if (ar.succeeded()) {
                 WebSocket ws = ar.result();
                 wsHolder.add(ws);
@@ -214,6 +215,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -269,7 +271,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
 
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
-        client.webSocket(sockjsOpts(token)).onComplete(ar -> {
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
             if (ar.succeeded()) {
                 WebSocket ws = ar.result();
                 wsHolder.add(ws);
@@ -283,6 +285,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -322,7 +325,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
 
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
-        client.webSocket(sockjsOpts(token)).onComplete(ar -> {
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
             if (ar.succeeded()) {
                 WebSocket ws = ar.result();
                 wsHolder.add(ws);
@@ -330,6 +333,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", unknownAddress)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -364,7 +368,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
 
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
-        client.webSocket(sockjsOpts(token)).onComplete(ar -> {
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
             if (ar.succeeded()) {
                 WebSocket ws = ar.result();
                 wsHolder.add(ws);
@@ -378,6 +382,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -434,7 +439,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
 
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
-        client.webSocket(sockjsOpts(token)).onComplete(ar -> {
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
             if (ar.succeeded()) {
                 WebSocket ws = ar.result();
                 wsHolder.add(ws);
@@ -448,6 +453,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -505,7 +511,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
         // First connection — drains the inbox
-        client.webSocket(sockjsOpts(token)).onComplete(ar -> {
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
             if (ar.succeeded()) {
                 WebSocket ws = ar.result();
                 wsHolder.add(ws);
@@ -520,6 +526,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -536,7 +543,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
         List<String> secondReceived = new ArrayList<>();
         CountDownLatch secondOpen = new CountDownLatch(1);
 
-        client.webSocket(sockjsOpts(token)).onComplete(ar -> {
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
             if (ar.succeeded()) {
                 WebSocket ws = ar.result();
                 wsHolder.add(ws);
@@ -550,6 +557,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -576,7 +584,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
 
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
-        client.webSocket(sockjsOpts(token)).onComplete(ar -> {
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
             if (ar.succeeded()) {
                 WebSocket ws = ar.result();
                 wsHolder.add(ws);
@@ -624,7 +632,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
 
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
-        client.webSocket(sockjsOpts(token)).onComplete(ar -> {
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
             if (ar.succeeded()) {
                 WebSocket ws = ar.result();
                 wsHolder.add(ws);
@@ -638,6 +646,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -675,7 +684,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
 
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
-        client.webSocket(sockjsOpts(token)).onComplete(ar -> {
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
             if (ar.succeeded()) {
                 WebSocket ws = ar.result();
                 wsHolder.add(ws);
@@ -689,6 +698,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -699,6 +709,156 @@ class NotificationSockJSBridgeTest extends AbstractTest {
         await().atMost(5, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertThat(received).isNotEmpty());
         assertThat(received.get(0)).contains(receiverId);
+
+        if (!wsHolder.isEmpty())
+            wsHolder.get(0).close();
+        client.close();
+    }
+
+    /**
+     * Covers: {@code if (token == null || token.isBlank()) return null;}
+     *
+     * A REGISTER frame that omits the "token" field altogether causes
+     * {@code getRawMessage().getString("token")} to return null, so
+     * {@code extractSubjectFromRegisterPayload} returns null, the subject
+     * does not match the receiverId, and the registration is rejected.
+     */
+    @Test
+    void sockjs_register_missingToken_rejected() throws Exception {
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
+        String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
+
+        List<String> errors = new ArrayList<>();
+        CountDownLatch openLatch = new CountDownLatch(1);
+        List<WebSocket> wsHolder = new ArrayList<>();
+
+        HttpClient client = vertx.createHttpClient(new HttpClientOptions());
+
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
+            if (ar.succeeded()) {
+                WebSocket ws = ar.result();
+                wsHolder.add(ws);
+                ws.handler(buf -> {
+                    String text = buf.toString();
+                    if (isRejectedFrame(text)) {
+                        errors.add(text);
+                    }
+                });
+                openLatch.countDown();
+                // Deliberately omit "token" — getString("token") returns null
+                ws.writeTextMessage(new JsonObject()
+                        .put("type", "register")
+                        .put("address", address)
+                        .encode());
+            }
+        });
+
+        assertThat(openLatch.await(5, TimeUnit.SECONDS)).isTrue();
+        await().atMost(3, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(errors).isNotEmpty());
+
+        assertThat(NotificationSockJSBridge.hasActiveReceiver(receiverId)).isFalse();
+
+        if (!wsHolder.isEmpty())
+            wsHolder.get(0).close();
+        client.close();
+    }
+
+    /**
+     * Covers: {@code if (token == null || token.isBlank()) return null;}
+     *
+     * A REGISTER frame with a blank (whitespace-only) "token" value causes
+     * {@code token.isBlank()} to be true, so {@code extractSubjectFromRegisterPayload}
+     * returns null and the registration is rejected.
+     */
+    @Test
+    void sockjs_register_blankToken_rejected() throws Exception {
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
+        String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
+
+        List<String> errors = new ArrayList<>();
+        CountDownLatch openLatch = new CountDownLatch(1);
+        List<WebSocket> wsHolder = new ArrayList<>();
+
+        HttpClient client = vertx.createHttpClient(new HttpClientOptions());
+
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
+            if (ar.succeeded()) {
+                WebSocket ws = ar.result();
+                wsHolder.add(ws);
+                ws.handler(buf -> {
+                    String text = buf.toString();
+                    if (isRejectedFrame(text)) {
+                        errors.add(text);
+                    }
+                });
+                openLatch.countDown();
+                // Blank token — isBlank() returns true
+                ws.writeTextMessage(new JsonObject()
+                        .put("type", "register")
+                        .put("address", address)
+                        .put("token", "   ")
+                        .encode());
+            }
+        });
+
+        assertThat(openLatch.await(5, TimeUnit.SECONDS)).isTrue();
+        await().atMost(3, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(errors).isNotEmpty());
+
+        assertThat(NotificationSockJSBridge.hasActiveReceiver(receiverId)).isFalse();
+
+        if (!wsHolder.isEmpty())
+            wsHolder.get(0).close();
+        client.close();
+    }
+
+    /**
+     * Covers: {@code catch (Exception ex) { ... return null; }}
+     *
+     * A REGISTER frame with a malformed token (not a valid JWT) causes
+     * {@code TokenParserService.parseToken()} to throw, the catch block
+     * logs a debug message and returns null, so the registration is rejected.
+     */
+    @Test
+    void sockjs_register_malformedToken_rejected() throws Exception {
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
+        String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
+
+        List<String> errors = new ArrayList<>();
+        CountDownLatch openLatch = new CountDownLatch(1);
+        List<WebSocket> wsHolder = new ArrayList<>();
+
+        HttpClient client = vertx.createHttpClient(new HttpClientOptions());
+
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
+            if (ar.succeeded()) {
+                WebSocket ws = ar.result();
+                wsHolder.add(ws);
+                ws.handler(buf -> {
+                    String text = buf.toString();
+                    if (isRejectedFrame(text)) {
+                        errors.add(text);
+                    }
+                });
+                openLatch.countDown();
+                // Garbage token — not a valid JWT; TokenParserService will throw
+                ws.writeTextMessage(new JsonObject()
+                        .put("type", "register")
+                        .put("address", address)
+                        .put("token", "this.is.not.a.valid.jwt.token")
+                        .encode());
+            }
+        });
+
+        assertThat(openLatch.await(5, TimeUnit.SECONDS)).isTrue();
+        await().atMost(3, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(errors).isNotEmpty());
+
+        assertThat(NotificationSockJSBridge.hasActiveReceiver(receiverId)).isFalse();
 
         if (!wsHolder.isEmpty())
             wsHolder.get(0).close();
@@ -726,7 +886,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
 
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
-        client.webSocket(sockjsOpts(userToken)).onComplete(ar -> {
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
             if (ar.succeeded()) {
                 WebSocket ws = ar.result();
                 wsHolder.add(ws);
@@ -742,6 +902,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", userToken)
                         .encode());
             }
         });
@@ -759,14 +920,11 @@ class NotificationSockJSBridgeTest extends AbstractTest {
         client.close();
     }
 
-    private WebSocketConnectOptions sockjsOpts(String token) {
-        WebSocketConnectOptions options = new WebSocketConnectOptions()
+    private WebSocketConnectOptions sockjsOpts() {
+        return new WebSocketConnectOptions()
                 .setHost(baseUrl.getHost())
                 .setPort(baseUrl.getPort())
                 .setURI("/eventbus/websocket");
-
-        options.addHeader("Authorization", "Bearer " + token);
-        return options;
     }
 
     private boolean isNotificationPayload(String text) {

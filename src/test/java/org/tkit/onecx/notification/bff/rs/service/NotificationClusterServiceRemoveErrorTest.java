@@ -81,7 +81,7 @@ class NotificationClusterServiceRemoveErrorTest extends AbstractTest {
 
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
-        client.webSocket(sockjsOpts(token))
+        client.webSocket(sockjsOpts())
                 .onComplete(ar -> {
                     if (ar.succeeded()) {
                         WebSocket ws = ar.result();
@@ -96,6 +96,7 @@ class NotificationClusterServiceRemoveErrorTest extends AbstractTest {
                         ws.writeTextMessage(new JsonObject()
                                 .put("type", "register")
                                 .put("address", address)
+                                .put("token", token)
                                 .encode());
                     }
                 });
@@ -127,13 +128,10 @@ class NotificationClusterServiceRemoveErrorTest extends AbstractTest {
         client.close();
     }
 
-    private WebSocketConnectOptions sockjsOpts(String token) {
-        WebSocketConnectOptions options = new WebSocketConnectOptions()
+    private WebSocketConnectOptions sockjsOpts() {
+        return new WebSocketConnectOptions()
                 .setHost(baseUrl.getHost())
                 .setPort(baseUrl.getPort())
                 .setURI("/eventbus/websocket");
-
-        options.addHeader("Authorization", "Bearer " + token);
-        return options;
     }
 }

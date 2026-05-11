@@ -219,7 +219,7 @@ class NotificationClusterServiceTest extends AbstractTest {
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
         // Connect and REGISTER so hasActiveReceiver() returns true for this receiverId
-        client.webSocket(sockjsOpts(token))
+        client.webSocket(sockjsOpts())
                 .onComplete(ar -> {
                     if (ar.succeeded()) {
                         WebSocket ws = ar.result();
@@ -234,6 +234,7 @@ class NotificationClusterServiceTest extends AbstractTest {
                         ws.writeTextMessage(new JsonObject()
                                 .put("type", "register")
                                 .put("address", address)
+                                .put("token", token)
                                 .encode());
                     }
                 });
@@ -306,7 +307,7 @@ class NotificationClusterServiceTest extends AbstractTest {
 
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
-        client.webSocket(sockjsOpts(token))
+        client.webSocket(sockjsOpts())
                 .onComplete(ar -> {
                     if (ar.succeeded()) {
                         WebSocket ws = ar.result();
@@ -321,6 +322,7 @@ class NotificationClusterServiceTest extends AbstractTest {
                         ws.writeTextMessage(new JsonObject()
                                 .put("type", "register")
                                 .put("address", address)
+                                .put("token", token)
                                 .encode());
                     }
                 });
@@ -382,7 +384,7 @@ class NotificationClusterServiceTest extends AbstractTest {
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
         // Connect and REGISTER so hasActiveReceiver() returns true for this receiverId
-        client.webSocket(sockjsOpts(token))
+        client.webSocket(sockjsOpts())
                 .onComplete(ar -> {
                     if (ar.succeeded()) {
                         WebSocket ws = ar.result();
@@ -397,6 +399,7 @@ class NotificationClusterServiceTest extends AbstractTest {
                         ws.writeTextMessage(new JsonObject()
                                 .put("type", "register")
                                 .put("address", address)
+                                .put("token", token)
                                 .encode());
                     }
                 });
@@ -464,7 +467,7 @@ class NotificationClusterServiceTest extends AbstractTest {
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
         // Connect and REGISTER so hasActiveReceiver() returns true for this receiverId
-        client.webSocket(sockjsOpts(token))
+        client.webSocket(sockjsOpts())
                 .onComplete(ar -> {
                     if (ar.succeeded()) {
                         WebSocket ws = ar.result();
@@ -479,6 +482,7 @@ class NotificationClusterServiceTest extends AbstractTest {
                         ws.writeTextMessage(new JsonObject()
                                 .put("type", "register")
                                 .put("address", address)
+                                .put("token", token)
                                 .encode());
                     }
                 });
@@ -533,13 +537,10 @@ class NotificationClusterServiceTest extends AbstractTest {
         return dto;
     }
 
-    private WebSocketConnectOptions sockjsOpts(String token) {
-        WebSocketConnectOptions options = new WebSocketConnectOptions()
+    private WebSocketConnectOptions sockjsOpts() {
+        return new WebSocketConnectOptions()
                 .setHost(baseUrl.getHost())
                 .setPort(baseUrl.getPort())
                 .setURI("/eventbus/websocket");
-
-        options.addHeader("Authorization", "Bearer " + token);
-        return options;
     }
 }
