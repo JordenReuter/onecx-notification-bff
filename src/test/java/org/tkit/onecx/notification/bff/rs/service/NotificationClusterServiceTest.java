@@ -55,7 +55,8 @@ class NotificationClusterServiceTest extends AbstractTest {
     @BeforeEach
     void drainAll() {
         for (String r : List.of("r1", "r2", "r3", "persist-receiver", "meta-receiver", "live-receiver",
-                "live-persist-receiver", "live-persist-fail-receiver", "live-persist-null-id-receiver")) {
+                "live-persist-receiver", "live-persist-fail-receiver", "live-persist-null-id-receiver",
+                getTokenSubject(getKeycloakUserToken(ADMIN)), getTokenSubject(getKeycloakUserToken(USER)))) {
             service.consumeByReceiverId(r).await().indefinitely();
         }
     }
@@ -207,7 +208,8 @@ class NotificationClusterServiceTest extends AbstractTest {
 
     @Test
     void topicListener_hasActiveReceiver_true_iMapEntryRemovedAfterLiveDelivery() throws Exception {
-        String receiverId = "live-receiver";
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
         String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
 
         List<String> received = new ArrayList<>();
@@ -217,10 +219,7 @@ class NotificationClusterServiceTest extends AbstractTest {
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
         // Connect and REGISTER so hasActiveReceiver() returns true for this receiverId
-        client.webSocket(new WebSocketConnectOptions()
-                .setHost(baseUrl.getHost())
-                .setPort(baseUrl.getPort())
-                .setURI("/eventbus/websocket"))
+        client.webSocket(sockjsOpts(token))
                 .onComplete(ar -> {
                     if (ar.succeeded()) {
                         WebSocket ws = ar.result();
@@ -297,7 +296,8 @@ class NotificationClusterServiceTest extends AbstractTest {
      */
     @Test
     void topicListener_hasActiveReceiver_persistTrue_nullId_markAsDeliveredSkipped() throws Exception {
-        String receiverId = "live-persist-null-id-receiver";
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
         String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
 
         List<String> received = new ArrayList<>();
@@ -306,10 +306,7 @@ class NotificationClusterServiceTest extends AbstractTest {
 
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
-        client.webSocket(new WebSocketConnectOptions()
-                .setHost(baseUrl.getHost())
-                .setPort(baseUrl.getPort())
-                .setURI("/eventbus/websocket"))
+        client.webSocket(sockjsOpts(token))
                 .onComplete(ar -> {
                     if (ar.succeeded()) {
                         WebSocket ws = ar.result();
@@ -367,7 +364,8 @@ class NotificationClusterServiceTest extends AbstractTest {
      */
     @Test
     void topicListener_hasActiveReceiver_persistTrue_markAsDeliveredSucceeds() throws Exception {
-        String receiverId = "live-persist-receiver";
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
         String notifId = "live-persist-id-1";
         String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
 
@@ -384,10 +382,7 @@ class NotificationClusterServiceTest extends AbstractTest {
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
         // Connect and REGISTER so hasActiveReceiver() returns true for this receiverId
-        client.webSocket(new WebSocketConnectOptions()
-                .setHost(baseUrl.getHost())
-                .setPort(baseUrl.getPort())
-                .setURI("/eventbus/websocket"))
+        client.webSocket(sockjsOpts(token))
                 .onComplete(ar -> {
                     if (ar.succeeded()) {
                         WebSocket ws = ar.result();
@@ -451,7 +446,8 @@ class NotificationClusterServiceTest extends AbstractTest {
      */
     @Test
     void topicListener_hasActiveReceiver_persistTrue_markAsDeliveredFails_loggedAndNotPropagated() throws Exception {
-        String receiverId = "live-persist-fail-receiver";
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
         String notifId = "live-persist-fail-id-1";
         String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
 
@@ -468,10 +464,7 @@ class NotificationClusterServiceTest extends AbstractTest {
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
         // Connect and REGISTER so hasActiveReceiver() returns true for this receiverId
-        client.webSocket(new WebSocketConnectOptions()
-                .setHost(baseUrl.getHost())
-                .setPort(baseUrl.getPort())
-                .setURI("/eventbus/websocket"))
+        client.webSocket(sockjsOpts(token))
                 .onComplete(ar -> {
                     if (ar.succeeded()) {
                         WebSocket ws = ar.result();
@@ -538,5 +531,15 @@ class NotificationClusterServiceTest extends AbstractTest {
         dto.setReceiverId(receiverId);
         dto.setPersist(persist);
         return dto;
+    }
+
+    private WebSocketConnectOptions sockjsOpts(String token) {
+        WebSocketConnectOptions options = new WebSocketConnectOptions()
+                .setHost(baseUrl.getHost())
+                .setPort(baseUrl.getPort())
+                .setURI("/eventbus/websocket");
+
+        options.addHeader("Authorization", "Bearer " + token);
+        return options;
     }
 }

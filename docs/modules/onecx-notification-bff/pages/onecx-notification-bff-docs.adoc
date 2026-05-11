@@ -30,11 +30,10 @@ tkit.security-dynamic-test.openapi.enabled-integration-test=false
 %prod.quarkus.vertx.cluster.clustered=true
 %prod.quarkus.vertx.cluster.host=${POD_IP:0.0.0.0}
 quarkus.http.auth.permission.eventbus.paths=/eventbus/*
-quarkus.http.auth.permission.eventbus.policy=permit
+quarkus.http.auth.permission.eventbus.policy=authenticated
 ## Keep long-lived WebSocket / SockJS connections alive.
 ## idle-timeout=0 disables the HTTP connection idle timeout server-wide
 ## Vert.x underlying TCP options ? disable idle timeout on the HTTP server transport
-%prod.quarkus.log.category."com.hazelcast".level=WARNING
 ----
 ====
 

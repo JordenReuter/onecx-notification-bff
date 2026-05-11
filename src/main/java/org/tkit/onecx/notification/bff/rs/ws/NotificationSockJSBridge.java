@@ -1,5 +1,7 @@
 package org.tkit.onecx.notification.bff.rs.ws;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,11 +20,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import gen.org.tkit.onecx.notification.bff.rs.internal.model.NotificationDTO;
 import gen.org.tkit.onecx.notification.svc.internal.client.api.NotificationInternalApi;
 import io.quarkus.runtime.StartupEvent;
+import io.vertx.core.MultiMap;
 import io.vertx.core.Vertx;
 import io.vertx.core.eventbus.EventBus;
+import io.vertx.core.json.JsonObject;
 import io.vertx.ext.bridge.BridgeEventType;
 import io.vertx.ext.bridge.PermittedOptions;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.sockjs.BridgeEvent;
 import io.vertx.ext.web.handler.sockjs.SockJSBridgeOptions;
 import io.vertx.ext.web.handler.sockjs.SockJSHandler;
 import io.vertx.ext.web.handler.sockjs.SockJSHandlerOptions;
@@ -53,9 +58,14 @@ import io.vertx.ext.web.handler.sockjs.SockJSHandlerOptions;
  * topic deliveries, allowing missed messages to accumulate until the next REGISTER.
  *
  * Security:
- * Only outbound addresses ({@code notifications.onecx.new.*}) are permitted.
- * No inbound permissions are configured, so browsers cannot publish to the EventBus —
+ * - The initial SockJS HTTP/WebSocket handshake is protected by Quarkus HTTP auth/OIDC
+ * on {@code /eventbus/*}, so invalid or missing bearer tokens are rejected before the
+ * bridge is reached.
+ * - Only outbound addresses ({@code notifications.onecx.new.*}) are permitted.
+ * - No inbound permissions are configured, so browsers cannot publish to the EventBus —
  * all writes go through the REST API ({@code POST /notifications/dispatch}).
+ * - On REGISTER, the bridge performs resource-level authorization by requiring the
+ * authenticated token subject ({@code sub}) to equal the requested {@code receiverId}.
  */
 @ApplicationScoped
 @LogService
@@ -93,6 +103,49 @@ public class NotificationSockJSBridge {
      */
     public static boolean hasActiveReceiver(String receiverId) {
         return ACTIVE_RECEIVERS.contains(receiverId);
+    }
+
+    static String subjectOf(BridgeEvent bridgeEvent) {
+        if (bridgeEvent == null || bridgeEvent.socket() == null || bridgeEvent.socket().webUser() == null) {
+            return subjectFromAuthorizationHeader(bridgeEvent);
+        }
+
+        JsonObject principal = bridgeEvent.socket().webUser().principal();
+        if (principal == null) {
+            return subjectFromAuthorizationHeader(bridgeEvent);
+        }
+
+        String sub = principal.getString("sub");
+        return sub != null ? sub : subjectFromAuthorizationHeader(bridgeEvent);
+    }
+
+    private static String subjectFromAuthorizationHeader(BridgeEvent bridgeEvent) {
+        if (bridgeEvent == null || bridgeEvent.socket() == null) {
+            return null;
+        }
+
+        MultiMap headers = bridgeEvent.socket().headers();
+        if (headers == null) {
+            return null;
+        }
+
+        String authorization = headers.get("Authorization");
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            return null;
+        }
+
+        String[] tokenParts = authorization.substring("Bearer ".length()).split("\\.");
+        if (tokenParts.length < 2) {
+            return null;
+        }
+
+        try {
+            String payloadJson = new String(Base64.getUrlDecoder().decode(tokenParts[1]), StandardCharsets.UTF_8);
+            return new JsonObject(payloadJson).getString("sub");
+        } catch (Exception ex) {
+            LOG.debugf("Failed to read token subject from Authorization header: %s", ex.getMessage());
+            return null;
+        }
     }
 
     /** Raw (non-Mutiny) Vert.x instance — needed to create the {@link SockJSHandler}. */
@@ -167,7 +220,8 @@ public class NotificationSockJSBridge {
         router.route(BRIDGE_PATH).subRouter(
                 sockJSHandler.bridge(bridgeOptions, bridgeEvent -> {
                     if (bridgeEvent.type() == BridgeEventType.SOCKET_CREATED) {
-                        LOG.infof("SockJS socket created:  %s", bridgeEvent.socket().remoteAddress());
+                        LOG.infof("SockJS socket created: %s, sub=%s", bridgeEvent.socket().remoteAddress(),
+                                subjectOf(bridgeEvent));
 
                     } else if (bridgeEvent.type() == BridgeEventType.SOCKET_CLOSED) {
                         LOG.infof("SockJS socket closed:   %s", bridgeEvent.socket().remoteAddress());
@@ -176,14 +230,24 @@ public class NotificationSockJSBridge {
                     } else if (bridgeEvent.type() == BridgeEventType.REGISTER) {
                         String address = bridgeEvent.getRawMessage().getString("address");
 
-                        if (address.startsWith(NotificationClusterService.EB_ADDRESS_PREFIX)) {
+                        if (address != null && address.startsWith(NotificationClusterService.EB_ADDRESS_PREFIX)) {
                             // Extract receiverId from "notifications.new.<receiverId>"
                             String receiverId = address.substring(
                                     NotificationClusterService.EB_ADDRESS_PREFIX.length());
+                            String subject = subjectOf(bridgeEvent);
+
+                            if (subject == null || !receiverId.equals(subject)) {
+                                LOG.warnf(
+                                        "Rejecting SockJS register for address='%s': token subject '%s' is not allowed to subscribe as receiverId '%s'",
+                                        address, subject, receiverId);
+                                bridgeEvent.complete(false);
+                                return;
+                            }
 
                             // Mark this receiver as active on this pod
                             ACTIVE_RECEIVERS.add(receiverId);
-                            LOG.infof("Client registered for receiverId='%s' — draining inbox", receiverId);
+                            LOG.infof("Client registered for receiverId='%s' (sub='%s') — draining inbox",
+                                    receiverId, subject);
 
                             // Drain IMap inbox: read + remove, then push each stored notification
                             cacheManager.consumeByReceiverId(receiverId)
