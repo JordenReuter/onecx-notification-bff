@@ -10,8 +10,11 @@ import jakarta.inject.Inject;
 
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.jboss.logging.Logger;
+import org.tkit.onecx.notification.bff.rs.config.NotificationConfig;
 import org.tkit.onecx.notification.bff.rs.service.NotificationClusterService;
 import org.tkit.quarkus.log.cdi.LogService;
+import org.tkit.quarkus.rs.context.token.TokenParserRequest;
+import org.tkit.quarkus.rs.context.token.TokenParserService;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -23,6 +26,7 @@ import io.vertx.core.eventbus.EventBus;
 import io.vertx.ext.bridge.BridgeEventType;
 import io.vertx.ext.bridge.PermittedOptions;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.sockjs.BridgeEvent;
 import io.vertx.ext.web.handler.sockjs.SockJSBridgeOptions;
 import io.vertx.ext.web.handler.sockjs.SockJSHandler;
 import io.vertx.ext.web.handler.sockjs.SockJSHandlerOptions;
@@ -40,7 +44,10 @@ import io.vertx.ext.web.handler.sockjs.SockJSHandlerOptions;
  * 1. SOCKET_CREATED — a browser has opened the SockJS connection. Logged only.
  * 2. REGISTER — the browser subscribes to an EventBus address of the form
  * {@code notifications.onecx.new.<receiverId>}. At this point:
- * - The {@code receiverId} is added to {@link #ACTIVE_RECEIVERS} so the
+ * - The JWT token must be present in the JSON payload as the {@code "token"} field.
+ * - The token subject ({@code sub}) is extracted and compared to the {@code receiverId}.
+ * - If they do not match, the registration is rejected.
+ * - If they match, the {@code receiverId} is added to {@link #ACTIVE_RECEIVERS} so the
  * cluster service knows this pod has a live session for that receiver.
  * - The IMap inbox is drained via
  * {@link NotificationClusterService#consumeByReceiverId(String)} and each
@@ -53,13 +60,23 @@ import io.vertx.ext.web.handler.sockjs.SockJSHandlerOptions;
  * topic deliveries, allowing missed messages to accumulate until the next REGISTER.
  *
  * Security:
- * Only outbound addresses ({@code notifications.onecx.new.*}) are permitted.
- * No inbound permissions are configured, so browsers cannot publish to the EventBus —
+ * - The initial SockJS HTTP/WebSocket handshake is open ({@code policy=permit}) for browser
+ * compatibility. Browsers cannot send custom headers on handshake due to Same-Origin Policy.
+ * - Authorization is enforced at REGISTER time by validating the JWT token in the payload.
+ * - Only outbound addresses ({@code notifications.onecx.new.*}) are permitted.
+ * - No inbound permissions are configured, so browsers cannot publish to the EventBus —
  * all writes go through the REST API ({@code POST /notifications/dispatch}).
+ * - On REGISTER, the bridge performs resource-level authorization: token subject ({@code sub})
+ * must equal the requested {@code receiverId}.
+ * - The token is expected to be present in every REGISTER message. If missing or invalid,
+ * registration is rejected.
  */
 @ApplicationScoped
 @LogService
 public class NotificationSockJSBridge {
+
+    @Inject
+    NotificationConfig notificationConfig;
 
     private static final Logger LOG = Logger.getLogger(NotificationSockJSBridge.class);
 
@@ -95,6 +112,25 @@ public class NotificationSockJSBridge {
         return ACTIVE_RECEIVERS.contains(receiverId);
     }
 
+    String extractSubjectFromRegisterPayload(BridgeEvent bridgeEvent) {
+        String token = bridgeEvent.getRawMessage().getString(REGISTER_TOKEN_FIELD);
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+
+        try {
+            var parsedToken = tokenParserService
+                    .parseToken(new TokenParserRequest(token).verify(notificationConfig.tokenConfig().verified())
+                            .issuerEnabled(notificationConfig.tokenConfig().publicKeyEnabled())
+                            .issuerSuffix(notificationConfig.tokenConfig().publicKeyLocationSuffix()));
+
+            return parsedToken.getClaim("sub");
+        } catch (Exception ex) {
+            LOG.debugf("Failed to read token subject from register payload: %s", ex.getMessage());
+            return null;
+        }
+    }
+
     /** Raw (non-Mutiny) Vert.x instance — needed to create the {@link SockJSHandler}. */
     @Inject
     Vertx vertx;
@@ -115,6 +151,12 @@ public class NotificationSockJSBridge {
     @Inject
     @RestClient
     NotificationInternalApi notificationSVCClient;
+
+    /** Token parser service for extracting claims from JWT tokens. */
+    @Inject
+    TokenParserService tokenParserService;
+
+    private static final String REGISTER_TOKEN_FIELD = "token";
 
     /**
      * Configures and mounts the SockJS EventBus bridge at application startup.
@@ -146,8 +188,8 @@ public class NotificationSockJSBridge {
         // sessionTimeout: how long a session survives without any client frame (ms)
         // heartbeatInterval: server sends a heartbeat frame every N ms to keep connection alive
         SockJSHandlerOptions sockJSOptions = new SockJSHandlerOptions()
-                .setHeartbeatInterval(25000)
-                .setSessionTimeout(30000);
+                .setHeartbeatInterval(Integer.parseInt(notificationConfig.websocketConfig().heartbeatInterval()))
+                .setSessionTimeout(Integer.parseInt(notificationConfig.websocketConfig().sessionTimeout()));
         SockJSHandler sockJSHandler = SockJSHandler.create(vertx, sockJSOptions);
 
         // Escape dots for regex: "notifications.new." → "notifications\.new\."
@@ -158,7 +200,7 @@ public class NotificationSockJSBridge {
                 // Server → browser: only the notifications.new.* namespace
                 .addOutboundPermitted(new PermittedOptions().setAddressRegex(addressRegex))
                 // ping timeout: how long the bridge waits for a pong before closing (ms)
-                .setPingTimeout(60000);
+                .setPingTimeout(Integer.parseInt(notificationConfig.websocketConfig().pingTimeout()));
         // No inbound permitted — browsers cannot publish to the EventBus
 
         // Get raw (non-Mutiny) EventBus for local publish inside the bridge handler
@@ -167,7 +209,7 @@ public class NotificationSockJSBridge {
         router.route(BRIDGE_PATH).subRouter(
                 sockJSHandler.bridge(bridgeOptions, bridgeEvent -> {
                     if (bridgeEvent.type() == BridgeEventType.SOCKET_CREATED) {
-                        LOG.infof("SockJS socket created:  %s", bridgeEvent.socket().remoteAddress());
+                        LOG.infof("SockJS socket created: %s", bridgeEvent.socket().remoteAddress());
 
                     } else if (bridgeEvent.type() == BridgeEventType.SOCKET_CLOSED) {
                         LOG.infof("SockJS socket closed:   %s", bridgeEvent.socket().remoteAddress());
@@ -180,10 +222,20 @@ public class NotificationSockJSBridge {
                             // Extract receiverId from "notifications.new.<receiverId>"
                             String receiverId = address.substring(
                                     NotificationClusterService.EB_ADDRESS_PREFIX.length());
+                            String subject = extractSubjectFromRegisterPayload(bridgeEvent);
+
+                            if (!receiverId.equals(subject)) {
+                                LOG.warnf(
+                                        "Rejecting SockJS register for address='%s': token subject '%s' is not allowed to subscribe as receiverId '%s'",
+                                        address, subject, receiverId);
+                                bridgeEvent.complete(false);
+                                return;
+                            }
 
                             // Mark this receiver as active on this pod
                             ACTIVE_RECEIVERS.add(receiverId);
-                            LOG.infof("Client registered for receiverId='%s' — draining inbox", receiverId);
+                            LOG.infof("Client registered for receiverId='%s' (sub='%s') — draining inbox",
+                                    receiverId, subject);
 
                             // Drain IMap inbox: read + remove, then push each stored notification
                             cacheManager.consumeByReceiverId(receiverId)

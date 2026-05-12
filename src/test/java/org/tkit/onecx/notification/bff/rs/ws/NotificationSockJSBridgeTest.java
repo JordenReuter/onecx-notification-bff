@@ -49,9 +49,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
 
     @BeforeEach
     void drainAll() {
-        for (String r : List.of("ws-receiver1", "ws-receiver2", "ws-persist-receiver",
-                "ws-empty-receiver", "ws-fail-delivered-receiver", "ws-null-persist-receiver",
-                "ws-persist-no-id-receiver")) {
+        for (String r : List.of(getTokenSubject(getKeycloakUserToken(ADMIN)), getTokenSubject(getKeycloakUserToken(USER)))) {
             clusterService.consumeByReceiverId(r).await().indefinitely();
         }
     }
@@ -81,12 +79,23 @@ class NotificationSockJSBridgeTest extends AbstractTest {
     }
 
     // -------------------------------------------------------------------------
-    // /eventbus/info — SockJS negotiation endpoint (no auth required)
+    // /eventbus/info — SockJS negotiation endpoint (permit)
     // -------------------------------------------------------------------------
 
     @Test
-    void eventbusInfoEndpoint_isReachableWithoutAuth() {
+    void eventbusInfoEndpoint_requiresAuth() {
         given()
+                .when().get("/eventbus/info")
+                .then()
+                .statusCode(200);
+    }
+
+    @Test
+    void eventbusInfoEndpoint_isReachableWithAuth() {
+        String token = getKeycloakUserToken(USER);
+
+        given()
+                .auth().oauth2(token)
                 .when().get("/eventbus/info")
                 .then()
                 .statusCode(200);
@@ -124,7 +133,8 @@ class NotificationSockJSBridgeTest extends AbstractTest {
      */
     @Test
     void sockjs_register_addsToActiveReceivers_and_close_clears() throws Exception {
-        String receiverId = "ws-receiver1";
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
         String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
 
         CountDownLatch openLatch = new CountDownLatch(1);
@@ -145,6 +155,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -172,7 +183,8 @@ class NotificationSockJSBridgeTest extends AbstractTest {
      */
     @Test
     void sockjs_register_drainsStoredNotifications() throws Exception {
-        String receiverId = "ws-receiver2";
+        String token = getKeycloakUserToken(ADMIN);
+        String receiverId = getTokenSubject(token);
         String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
 
         // Store a notification before the client connects
@@ -195,7 +207,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 wsHolder.add(ws);
                 ws.handler(buf -> {
                     String text = buf.toString();
-                    if (!text.equals("h") && !text.equals("o")) {
+                    if (isNotificationPayload(text)) {
                         received.add(text);
                     }
                 });
@@ -203,6 +215,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -233,7 +246,8 @@ class NotificationSockJSBridgeTest extends AbstractTest {
      */
     @Test
     void sockjs_register_persistNotification_markedAsDelivered() throws Exception {
-        String receiverId = "ws-persist-receiver";
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
         String notifId = "persist-notif-id-1";
         String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
 
@@ -263,7 +277,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 wsHolder.add(ws);
                 ws.handler(buf -> {
                     String text = buf.toString();
-                    if (!text.equals("h") && !text.equals("o")) {
+                    if (isNotificationPayload(text)) {
                         received.add(text);
                     }
                 });
@@ -271,6 +285,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -304,6 +319,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
     @Test
     void sockjs_register_unknownAddress_doesNotAddToActiveReceivers() throws Exception {
         String unknownAddress = "some.other.address";
+        String token = getKeycloakUserToken(USER);
         CountDownLatch openLatch = new CountDownLatch(1);
         List<WebSocket> wsHolder = new ArrayList<>();
 
@@ -317,13 +333,13 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", unknownAddress)
+                        .put("token", token)
                         .encode());
             }
         });
 
         assertThat(openLatch.await(5, TimeUnit.SECONDS)).isTrue();
         // Give the server time to process
-        Thread.sleep(500);
 
         // unknownAddress is not a receiverId — must NOT be tracked
         assertThat(NotificationSockJSBridge.hasActiveReceiver(unknownAddress)).isFalse();
@@ -340,7 +356,8 @@ class NotificationSockJSBridgeTest extends AbstractTest {
      */
     @Test
     void sockjs_register_emptyInbox_noMessageSent() throws Exception {
-        String receiverId = "ws-empty-receiver";
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
         String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
 
         // Deliberately do NOT store anything — inbox is empty
@@ -356,7 +373,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 wsHolder.add(ws);
                 ws.handler(buf -> {
                     String text = buf.toString();
-                    if (!text.equals("h") && !text.equals("o")) {
+                    if (isNotificationPayload(text)) {
                         received.add(text);
                     }
                 });
@@ -364,6 +381,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -373,9 +391,6 @@ class NotificationSockJSBridgeTest extends AbstractTest {
         // Receiver must be tracked as active
         await().atMost(3, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertThat(NotificationSockJSBridge.hasActiveReceiver(receiverId)).isTrue());
-
-        // Wait a moment to ensure no spurious messages arrive
-        Thread.sleep(500);
 
         // Empty inbox → no notification pushed to the WebSocket
         assertThat(received).isEmpty();
@@ -394,7 +409,8 @@ class NotificationSockJSBridgeTest extends AbstractTest {
      */
     @Test
     void sockjs_register_persistNotification_markDeliveredFails_notificationStillDelivered() throws Exception {
-        String receiverId = "ws-fail-delivered-receiver";
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
         String notifId = "persist-fail-id-1";
         String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
 
@@ -425,7 +441,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 wsHolder.add(ws);
                 ws.handler(buf -> {
                     String text = buf.toString();
-                    if (!text.equals("h") && !text.equals("o")) {
+                    if (isNotificationPayload(text)) {
                         received.add(text);
                     }
                 });
@@ -433,6 +449,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -470,7 +487,8 @@ class NotificationSockJSBridgeTest extends AbstractTest {
      */
     @Test
     void sockjs_register_afterDrain_secondRegisterIsEmptyAndConnectionStaysOpen() throws Exception {
-        String receiverId = "ws-receiver2";
+        String token = getKeycloakUserToken(ADMIN);
+        String receiverId = getTokenSubject(token);
         String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
 
         // Store one notification, connect, drain it
@@ -496,7 +514,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.closeHandler(v -> firstClose.countDown());
                 ws.handler(buf -> {
                     String text = buf.toString();
-                    if (!text.equals("h") && !text.equals("o")) {
+                    if (isNotificationPayload(text)) {
                         firstReceived.add(text);
                     }
                 });
@@ -504,6 +522,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -527,7 +546,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 wsHolder.add(ws);
                 ws.handler(buf -> {
                     String text = buf.toString();
-                    if (!text.equals("h") && !text.equals("o")) {
+                    if (isNotificationPayload(text)) {
                         secondReceived.add(text);
                     }
                 });
@@ -535,6 +554,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -546,7 +566,6 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 .untilAsserted(() -> assertThat(NotificationSockJSBridge.hasActiveReceiver(receiverId)).isTrue());
 
         // No messages pushed — empty inbox
-        Thread.sleep(500);
         assertThat(secondReceived).isEmpty();
 
         if (!wsHolder.isEmpty())
@@ -574,7 +593,6 @@ class NotificationSockJSBridgeTest extends AbstractTest {
         });
 
         assertThat(openLatch.await(5, TimeUnit.SECONDS)).isTrue();
-        Thread.sleep(500);
 
         // No receiverId should have been added — address was null
         assertThat(NotificationSockJSBridge.hasActiveReceiver("")).isFalse();
@@ -590,7 +608,8 @@ class NotificationSockJSBridgeTest extends AbstractTest {
      */
     @Test
     void sockjs_register_persistNull_notificationDelivered_markAsDeliveredSkipped() throws Exception {
-        String receiverId = "ws-null-persist-receiver";
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
         String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
 
         // persist is deliberately left null
@@ -614,7 +633,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 wsHolder.add(ws);
                 ws.handler(buf -> {
                     String text = buf.toString();
-                    if (!text.equals("h") && !text.equals("o")) {
+                    if (isNotificationPayload(text)) {
                         received.add(text);
                     }
                 });
@@ -622,6 +641,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -640,7 +660,8 @@ class NotificationSockJSBridgeTest extends AbstractTest {
 
     @Test
     void sockjs_register_persistTrueButNullId_notificationDelivered_markAsDeliveredSkipped() throws Exception {
-        String receiverId = "ws-persist-no-id-receiver";
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
         String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
 
         // persist=true but id is deliberately null
@@ -664,7 +685,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 wsHolder.add(ws);
                 ws.handler(buf -> {
                     String text = buf.toString();
-                    if (!text.equals("h") && !text.equals("o")) {
+                    if (isNotificationPayload(text)) {
                         received.add(text);
                     }
                 });
@@ -672,6 +693,7 @@ class NotificationSockJSBridgeTest extends AbstractTest {
                 ws.writeTextMessage(new JsonObject()
                         .put("type", "register")
                         .put("address", address)
+                        .put("token", token)
                         .encode());
             }
         });
@@ -688,10 +710,230 @@ class NotificationSockJSBridgeTest extends AbstractTest {
         client.close();
     }
 
+    /**
+     * Covers: {@code if (token == null || token.isBlank()) return null;}
+     *
+     * A REGISTER frame that omits the "token" field altogether causes
+     * {@code getRawMessage().getString("token")} to return null, so
+     * {@code extractSubjectFromRegisterPayload} returns null, the subject
+     * does not match the receiverId, and the registration is rejected.
+     */
+    @Test
+    void sockjs_register_missingToken_rejected() throws Exception {
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
+        String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
+
+        List<String> errors = new ArrayList<>();
+        CountDownLatch openLatch = new CountDownLatch(1);
+        List<WebSocket> wsHolder = new ArrayList<>();
+
+        HttpClient client = vertx.createHttpClient(new HttpClientOptions());
+
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
+            if (ar.succeeded()) {
+                WebSocket ws = ar.result();
+                wsHolder.add(ws);
+                ws.handler(buf -> {
+                    String text = buf.toString();
+                    if (isRejectedFrame(text)) {
+                        errors.add(text);
+                    }
+                });
+                openLatch.countDown();
+                // Deliberately omit "token" — getString("token") returns null
+                ws.writeTextMessage(new JsonObject()
+                        .put("type", "register")
+                        .put("address", address)
+                        .encode());
+            }
+        });
+
+        assertThat(openLatch.await(5, TimeUnit.SECONDS)).isTrue();
+        await().atMost(3, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(errors).isNotEmpty());
+
+        assertThat(NotificationSockJSBridge.hasActiveReceiver(receiverId)).isFalse();
+
+        if (!wsHolder.isEmpty())
+            wsHolder.get(0).close();
+        client.close();
+    }
+
+    /**
+     * Covers: {@code if (token == null || token.isBlank()) return null;}
+     *
+     * A REGISTER frame with a blank (whitespace-only) "token" value causes
+     * {@code token.isBlank()} to be true, so {@code extractSubjectFromRegisterPayload}
+     * returns null and the registration is rejected.
+     */
+    @Test
+    void sockjs_register_blankToken_rejected() throws Exception {
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
+        String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
+
+        List<String> errors = new ArrayList<>();
+        CountDownLatch openLatch = new CountDownLatch(1);
+        List<WebSocket> wsHolder = new ArrayList<>();
+
+        HttpClient client = vertx.createHttpClient(new HttpClientOptions());
+
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
+            if (ar.succeeded()) {
+                WebSocket ws = ar.result();
+                wsHolder.add(ws);
+                ws.handler(buf -> {
+                    String text = buf.toString();
+                    if (isRejectedFrame(text)) {
+                        errors.add(text);
+                    }
+                });
+                openLatch.countDown();
+                // Blank token — isBlank() returns true
+                ws.writeTextMessage(new JsonObject()
+                        .put("type", "register")
+                        .put("address", address)
+                        .put("token", "   ")
+                        .encode());
+            }
+        });
+
+        assertThat(openLatch.await(5, TimeUnit.SECONDS)).isTrue();
+        await().atMost(3, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(errors).isNotEmpty());
+
+        assertThat(NotificationSockJSBridge.hasActiveReceiver(receiverId)).isFalse();
+
+        if (!wsHolder.isEmpty())
+            wsHolder.get(0).close();
+        client.close();
+    }
+
+    /**
+     * Covers: {@code catch (Exception ex) { ... return null; }}
+     *
+     * A REGISTER frame with a malformed token (not a valid JWT) causes
+     * {@code TokenParserService.parseToken()} to throw, the catch block
+     * logs a debug message and returns null, so the registration is rejected.
+     */
+    @Test
+    void sockjs_register_malformedToken_rejected() throws Exception {
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
+        String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
+
+        List<String> errors = new ArrayList<>();
+        CountDownLatch openLatch = new CountDownLatch(1);
+        List<WebSocket> wsHolder = new ArrayList<>();
+
+        HttpClient client = vertx.createHttpClient(new HttpClientOptions());
+
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
+            if (ar.succeeded()) {
+                WebSocket ws = ar.result();
+                wsHolder.add(ws);
+                ws.handler(buf -> {
+                    String text = buf.toString();
+                    if (isRejectedFrame(text)) {
+                        errors.add(text);
+                    }
+                });
+                openLatch.countDown();
+                // Garbage token — not a valid JWT; TokenParserService will throw
+                ws.writeTextMessage(new JsonObject()
+                        .put("type", "register")
+                        .put("address", address)
+                        .put("token", "this.is.not.a.valid.jwt.token")
+                        .encode());
+            }
+        });
+
+        assertThat(openLatch.await(5, TimeUnit.SECONDS)).isTrue();
+        await().atMost(3, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(errors).isNotEmpty());
+
+        assertThat(NotificationSockJSBridge.hasActiveReceiver(receiverId)).isFalse();
+
+        if (!wsHolder.isEmpty())
+            wsHolder.get(0).close();
+        client.close();
+    }
+
+    @Test
+    void sockjs_register_receiverIdDifferentFromTokenSubject_rejected() throws Exception {
+        String adminToken = getKeycloakUserToken(ADMIN);
+        String userToken = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(adminToken);
+        String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
+
+        NotificationDTO dto = new NotificationDTO();
+        dto.setApplicationId("app1");
+        dto.setSenderId("sender");
+        dto.setReceiverId(receiverId);
+        dto.setPersist(false);
+        clusterService.storeNotification(dto).await().indefinitely();
+
+        List<String> received = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
+        CountDownLatch openLatch = new CountDownLatch(1);
+        List<WebSocket> wsHolder = new ArrayList<>();
+
+        HttpClient client = vertx.createHttpClient(new HttpClientOptions());
+
+        client.webSocket(sockjsOpts()).onComplete(ar -> {
+            if (ar.succeeded()) {
+                WebSocket ws = ar.result();
+                wsHolder.add(ws);
+                ws.handler(buf -> {
+                    String text = buf.toString();
+                    if (isRejectedFrame(text)) {
+                        errors.add(text);
+                    } else if (isNotificationPayload(text)) {
+                        received.add(text);
+                    }
+                });
+                openLatch.countDown();
+                ws.writeTextMessage(new JsonObject()
+                        .put("type", "register")
+                        .put("address", address)
+                        .put("token", userToken)
+                        .encode());
+            }
+        });
+
+        assertThat(openLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+        await().atMost(3, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(errors).isNotEmpty());
+
+        assertThat(NotificationSockJSBridge.hasActiveReceiver(receiverId)).isFalse();
+        assertThat(received).isEmpty();
+        assertThat(clusterService.consumeByReceiverId(receiverId).await().indefinitely()).hasSize(1);
+
+        if (!wsHolder.isEmpty())
+            wsHolder.get(0).close();
+        client.close();
+    }
+
     private WebSocketConnectOptions sockjsOpts() {
         return new WebSocketConnectOptions()
                 .setHost(baseUrl.getHost())
                 .setPort(baseUrl.getPort())
                 .setURI("/eventbus/websocket");
     }
+
+    private boolean isNotificationPayload(String text) {
+        if (text == null || text.equals("h") || text.equals("o")) {
+            return false;
+        }
+        return !isRejectedFrame(text);
+    }
+
+    private boolean isRejectedFrame(String text) {
+        return text != null
+                && text.contains("\"type\":\"err\"")
+                && text.contains("\"body\":\"rejected\"");
+    }
+
 }
