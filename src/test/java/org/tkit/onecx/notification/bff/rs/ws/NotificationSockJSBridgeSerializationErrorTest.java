@@ -62,12 +62,13 @@ class NotificationSockJSBridgeSerializationErrorTest extends AbstractTest {
 
     @BeforeEach
     void drainAll() {
-        clusterService.consumeByReceiverId("ws-serialize-error-receiver").await().indefinitely();
+        clusterService.consumeByReceiverId(getTokenSubject(getKeycloakUserToken(USER))).await().indefinitely();
     }
 
     @Test
     void sockjs_register_serializationError_catchBlockHit_connectionRemainsOpen() throws Exception {
-        String receiverId = "ws-serialize-error-receiver";
+        String token = getKeycloakUserToken(USER);
+        String receiverId = getTokenSubject(token);
         String address = NotificationClusterService.EB_ADDRESS_PREFIX + receiverId;
 
         // Store a notification so the drain loop is entered and writeValueAsString is called
@@ -84,10 +85,7 @@ class NotificationSockJSBridgeSerializationErrorTest extends AbstractTest {
 
         HttpClient client = vertx.createHttpClient(new HttpClientOptions());
 
-        client.webSocket(new WebSocketConnectOptions()
-                .setHost(baseUrl.getHost())
-                .setPort(baseUrl.getPort())
-                .setURI("/eventbus/websocket"))
+        client.webSocket(sockjsOpts())
                 .onComplete(ar -> {
                     if (ar.succeeded()) {
                         WebSocket ws = ar.result();
@@ -102,6 +100,7 @@ class NotificationSockJSBridgeSerializationErrorTest extends AbstractTest {
                         ws.writeTextMessage(new JsonObject()
                                 .put("type", "register")
                                 .put("address", address)
+                                .put("token", token)
                                 .encode());
                     }
                 });
@@ -122,5 +121,12 @@ class NotificationSockJSBridgeSerializationErrorTest extends AbstractTest {
         if (!wsHolder.isEmpty())
             wsHolder.get(0).close();
         client.close();
+    }
+
+    private WebSocketConnectOptions sockjsOpts() {
+        return new WebSocketConnectOptions()
+                .setHost(baseUrl.getHost())
+                .setPort(baseUrl.getPort())
+                .setURI("/eventbus/websocket");
     }
 }

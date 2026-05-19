@@ -1,5 +1,8 @@
 package org.tkit.onecx.notification.bff.rs;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+
 import org.eclipse.microprofile.config.ConfigProvider;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,6 +15,7 @@ import io.quarkus.test.keycloak.client.KeycloakTestClient;
 import io.restassured.RestAssured;
 import io.restassured.config.ObjectMapperConfig;
 import io.restassured.config.RestAssuredConfig;
+import io.vertx.core.json.JsonObject;
 
 @QuarkusTestResource(MockServerTestResource.class)
 @QuarkusTestResource(HazelcastTestResource.class)
@@ -27,6 +31,16 @@ public abstract class AbstractTest {
 
     protected String getKeycloakClientToken(String clientId) {
         return keycloakClient.getClientAccessToken(clientId);
+    }
+
+    protected String getKeycloakUserToken(String userName) {
+        return keycloakClient.getAccessToken(userName);
+    }
+
+    protected String getTokenSubject(String token) {
+        String payload = token.split("\\.")[1];
+        String json = new String(Base64.getUrlDecoder().decode(payload), StandardCharsets.UTF_8);
+        return new JsonObject(json).getString("sub");
     }
 
     static {
